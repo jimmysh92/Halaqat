@@ -1,56 +1,88 @@
-# حلقات — متابِع المسلسلات
+# Halaqat
 
-تطبيق React + Supabase يجلب حلقات مسلسلاتك من TVmaze (بدون مفتاح API)، ويخليك
-تأشّر على اللي شاهدته، وتشوف بلمحة **الحلقات المعروضة اللي بانتظارك**. البيانات
-تتزامن عبر أجهزتك عبر حسابك في Supabase.
+A series-tracking web app built end to end — authentication, authorisation, social
+features, and moderation — with security enforced at the database layer rather than
+the interface.
 
-## المتطلبات
+**Live:** https://halaqat-tv.netlify.app
 
-- Node.js 18 أو أحدث
-- حساب Supabase مجاني
+---
 
-## 1) إعداد Supabase
+## Why this exists
 
-1. أنشئ مشروعًا جديدًا على <https://supabase.com>.
-2. من **SQL Editor**، الصق محتوى `schema.sql` كاملًا واضغط **Run**. هذا ينشئ
-   الجدولين ويفعّل عزل البيانات (RLS) لكل مستخدم.
-3. من **Project Settings > API**، انسخ:
-   - `Project URL` → يذهب في `VITE_SUPABASE_URL`
-   - `anon public` key → يذهب في `VITE_SUPABASE_ANON_KEY`
-4. (اختياري لتسريع التجربة) من **Authentication > Providers > Email**، أطفئ
-   *Confirm email* عشان تدخل مباشرة بعد إنشاء الحساب دون تأكيد بريد.
+I wanted a tracker that answered one question well: *what am I behind on?*
+Most trackers show you a library. This one shows you a queue.
 
-## 2) التشغيل محليًا
+It also became the project where I stopped taking shortcuts at the authorisation
+layer, which is the part of this codebase I'd point at first.
+
+## What it does
+
+- **Pending-episode dashboard** — every followed series with a count of what you
+  haven't watched, sorted by what's most overdue
+- **Season accordion** — completed seasons collapse automatically, so the screen
+  shows what's live rather than what's finished
+- **Watch-later list** and a **new this week** view
+- **Half-star ratings**
+- **Threaded comments** on episodes, with replies and likes
+- **Three-tier roles** — user, moderator, admin
+
+## The parts worth reading
+
+### Authorisation is in the database, not the UI
+
+Every table is protected by Row Level Security policies. Hiding a button in React is
+a UI convenience; it is not access control. A user who opens the browser console
+cannot reach another user's rows, because the database refuses them regardless of
+what the client asks for.
+
+### Content moderation as a database trigger
+
+The banned-word filter runs as a trigger on the comments table. Client-side
+filtering can be bypassed by anyone willing to call the API directly. Putting it in
+the trigger means it applies to every write path that will ever exist, including
+ones I haven't written yet.
+
+### Login by email *or* username
+
+Supabase Auth signs in by email. Supporting usernames without weakening that meant a
+`SECURITY DEFINER` RPC that resolves a username to its account, so the convenience
+lives in one audited function rather than being scattered through the client.
+
+### Account deletion as an Edge Function
+
+Deleting a user touches auth records the client must never be allowed to reach. It
+runs server-side in a Supabase Edge Function, with the service role key read from the
+environment at runtime — never committed, never shipped to the browser.
+
+## Stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Frontend | React + Vite | Fast builds, no framework overhead for an SPA |
+| Backend | Supabase (PostgreSQL) | RLS, triggers, RPC and auth in one place |
+| Hosting | Netlify | Zero-config deploys from git |
+| Data | TVmaze API | Open, no key required |
+
+## Running locally
 
 ```bash
-cp .env.example .env      # ثم عبّئ القيمتين
+git clone https://github.com/jimmysh92/Halaqat.git
+cd Halaqat
 npm install
+cp .env.example .env      # add your Supabase URL and anon key
 npm run dev
 ```
 
-افتح الرابط اللي يظهر (عادة <http://localhost:5173>)، أنشئ حسابًا، وابدأ.
+The `anon` key is safe to expose in the client — it is protected by the Row Level
+Security policies above. The `service_role` key is used only inside the Edge
+Function and is read from the environment at runtime.
 
-## 3) النشر على Netlify
+## Status
 
-- **Build command:** `npm run build`
-- **Publish directory:** `dist`
-- أضف متغيّري البيئة في Netlify:
-  `Site settings > Environment variables` →
-  `VITE_SUPABASE_URL` و `VITE_SUPABASE_ANON_KEY`.
+Live and in use. Built and maintained solo.
 
-> ملاحظة: أضف رابط موقعك على Netlify في Supabase تحت
-> **Authentication > URL Configuration** (Site URL / Redirect URLs).
+---
 
-## كيف يشتغل
-
-- **الكتالوج (المسلسلات والحلقات)** يُجلب مباشرة من TVmaze عند الطلب، فالحلقات
-  الجديدة تظهر تلقائيًا دون أي صيانة.
-- **Supabase** يخزّن فقط: أي مسلسلات تتابع، وأي حلقات أشّرت أنك شاهدتها.
-- **العرض:** الحلقة تُعتبر "معروضة" إذا تجاوز وقت بثّها (`airstamp`) اللحظة الحالية.
-
-## ملاحظات
-
-- TVmaze تغطيته أغلبها إنجليزي، فابحث بالاسم الإنجليزي للمسلسل.
-- حد المعدّل في TVmaze ~20 طلبًا كل 10 ثوانٍ؛ التطبيق يجلب حلقات مسلسلاتك بتوازٍ
-  محدود (3) لتفادي تجاوز الحد.
-- ما فيه مفاتيح سرّية في الكود؛ مفتاح `anon` عام بطبيعته، والحماية عبر RLS.
+Built by [Jamal Shahwan](https://jamalshahwan.netlify.app) — I build internal tools,
+dashboards and web apps with real logic behind them.
